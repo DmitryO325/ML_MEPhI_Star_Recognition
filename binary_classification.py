@@ -178,7 +178,6 @@ from lightgbm import LGBMClassifier
 
 from imblearn.over_sampling import SMOTE
 
-# cross validation takes too long
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, # works better without scaling the data (interesting)
     stratify=y,
