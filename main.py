@@ -10,8 +10,8 @@ df = pd.read_csv('./data/whole_data_practice3.csv')
 pd.set_option('display.max_columns', None)
 plt.rcParams['figure.figsize'] = (16, 12)
 
-# print(df['present'].value_counts()) # dataset is not balansed
-# print(df['type'].isnull().sum() / df.shape[0]) # only 10% is filled
+print(df['present'].value_counts()) # dataset is not balansed
+print(df['type'].isnull().sum() / df.shape[0]) # only 10% is filled
 df.drop('type', inplace=True, axis=1)
 
 # print(df.isnull().sum())
@@ -104,7 +104,6 @@ count_metrics(y, y_pred)
 from sklearn.neighbors import KNeighborsClassifier
 knn = KNeighborsClassifier(n_neighbors=3, weights='distance')
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 y_pred = cross_val_predict(knn, X_scaled, y, cv=cv)
 
 count_metrics(y, y_pred)
@@ -113,7 +112,6 @@ count_metrics(y, y_pred)
 from sklearn.tree import DecisionTreeClassifier
 tree = DecisionTreeClassifier(criterion="entropy", class_weight='balanced')
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 y_pred = cross_val_predict(tree, X_scaled, y, cv=cv)
 
 count_metrics(y, y_pred)
@@ -123,7 +121,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 rfc = RandomForestClassifier(class_weight='balanced')
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 y_pred = cross_val_predict(rfc, X_scaled, y, cv=cv)
 
 count_metrics(y, y_pred)
@@ -133,7 +130,6 @@ from sklearn.ensemble import GradientBoostingClassifier
 
 gb = GradientBoostingClassifier()
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 y_pred = cross_val_predict(gb, X_scaled, y, cv=cv)
 
 count_metrics(y, y_pred) # acc 0.91, prec 0.86, rec 0.16, f1 0.27
@@ -148,7 +144,6 @@ pipeline = Pipeline([
 ])
 
 gb = GradientBoostingClassifier()
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 y_pred = cross_val_predict(pipeline, X_scaled, y, cv=cv)
 
 count_metrics(y, y_pred) # 0.86 acc, 0.4 prec, 0.72 rec, 0.52 F1
@@ -160,7 +155,6 @@ params = {
     "gb__max_depth": [7, 10, 12],
 }
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
 grid_search = GridSearchCV(pipeline, params, scoring="recall", cv=cv, n_jobs=-1)
 grid_search.fit(X_scaled, y)
@@ -171,3 +165,77 @@ best_model = grid_search.best_estimator_
 
 y_pred = cross_val_predict(best_model, X_scaled, y, cv=cv)
 count_metrics(y, y_pred) # acc 0.94, prec 0.68, rec 0.77, f1 0.72
+
+# stackin'
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingClassifier, StackingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_curve
+
+from catboost import CatBoostClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+
+from imblearn.over_sampling import SMOTE
+
+# cross validation takes too long
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, # works better without scaling the data (interesting)
+    stratify=y,
+    test_size=0.2,
+    random_state=42
+)
+
+# SMOTE
+smote = SMOTE(random_state=42, k_neighbors=5)
+X_res, y_res = smote.fit_resample(X_train, y_train)
+
+# defining models
+base_estimators = [
+    ('catboost', CatBoostClassifier(
+        verbose=False, random_state=42
+    )),
+    ('gbc', GradientBoostingClassifier(
+        random_state=42, max_depth=12
+    )),
+    ('xgb', XGBClassifier(
+        eval_metric='logloss', max_depth=12, random_state=42
+    )),
+    ('lgbm', LGBMClassifier(
+        max_depth=12, random_state=42
+    )),
+]
+
+# meta classisier
+final_est = LogisticRegression(
+    solver='lbfgs',
+    random_state=42
+)
+
+# stacking
+stack = StackingClassifier(
+    estimators=base_estimators,
+    final_estimator=final_est,
+    cv=5,
+    n_jobs=-1,
+    passthrough=False
+)
+
+stack.fit(X_res, y_res)
+
+# recieving probabilities
+y_proba = stack.predict_proba(X_test)[:, 1]
+precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
+
+# finding the best threshold
+best_threshold = 0.5
+best_recall = 0
+for i, threshold in enumerate(thresholds):
+    if precisions[i] >= 0.65 and recalls[i] > best_recall:
+        best_recall = recalls[i]
+        best_threshold = threshold
+
+y_pred = (y_proba >= best_threshold).astype(int)
+print(f"Оптимальный порог: {best_threshold:.3f}")
+
+count_metrics(y_test, y_pred) # acc 0.94; prec 0.65; rec 0.846; f1 0.735
