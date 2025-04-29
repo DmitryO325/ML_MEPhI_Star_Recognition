@@ -186,7 +186,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # SMOTE
-smote = SMOTE(random_state=42, k_neighbors=5)
+smote = SMOTE(random_state=42)
 X_res, y_res = smote.fit_resample(X_train, y_train)
 
 # defining models
@@ -195,13 +195,13 @@ base_estimators = [
         verbose=False, random_state=42
     )),
     ('gbc', GradientBoostingClassifier(
-        random_state=42, max_depth=12
+        random_state=42
     )),
     ('xgb', XGBClassifier(
-        eval_metric='logloss', max_depth=12, random_state=42
+        eval_metric='logloss', random_state=42
     )),
     ('lgbm', LGBMClassifier(
-        max_depth=12, random_state=42
+        random_state=42
     )),
 ]
 
@@ -237,4 +237,4 @@ for i, threshold in enumerate(thresholds):
 y_pred = (y_proba >= best_threshold).astype(int)
 print(f"Оптимальный порог: {best_threshold:.3f}")
 
-count_metrics(y_test, y_pred) # acc 0.94; prec 0.65; rec 0.846; f1 0.735
+count_metrics(y_test, y_pred) # .93, .65, .85, .74
