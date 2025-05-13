@@ -7,7 +7,7 @@
 1. **Бинарная классификация**: построение модели, отличающей переменные звёзды от статичных объектов.
 2. **Мультиклассовая классификация**: расширение задачи на выделение типов переменных звёзд (затменные, пульсирующие, ротационные, эруптивные).
 
-Ключевая цель — надёжное выявление переменных звёзд и классификация наиболее распространённых типов при сильном дисбалансе классов.
+Цель — надёжное выявление переменных звёзд и классификация наиболее распространённых типов при сильном дисбалансе классов.
 
 ---
 
@@ -51,19 +51,26 @@
 | Recall    | 0.85     |
 | F1-score  | 0.74     |
 
+**Матрица ошибок:**
+
+|           | Predicted: 0 | Predicted: 1 |
+| --------- | ------------ | ------------ |
+| Actual: 0 | 11081        | 599          |
+| Actual: 1 | 203          | 1114         |
+
 ---
 
 ## Часть 2. Мультиклассовая классификация
 
 ### Данные и цель
 
-* Источник данных: [VSX-паркет](https://drive.google.com/file/d/1wTkOoA222guACzvIJxLf4wU77Rykp1__/view?usp=sharing).
+* Источник данных: [VSX-паркет](https://drive.google.com/file/d/1wTkOoA222guACzvIJxLf4wU77Rykp1__/view?usp=sharing)
 * Задача: классифицировать объекты на четыре класса:
 
-  1. **ECLIPSING** (затменные)
-  2. **PULSATING** (пульсирующие)
-  3. **ROTATING** (ротационные)
-  4. **ERUPTIVE** (эруптивные)
+  1. **ECLIPSING** (затменные) - 2 568 649 объектов
+  2. **PULSATING** (пульсирующие) - 3 089 412
+  3. **ROTATING** (ротационные) - 3 102 285
+  4. **ERUPTIVE** (эруптивные) - 97 179, редкий класс
 
 ### Предобработка и feature engineering
 
@@ -78,47 +85,46 @@ df = pd.read_parquet("./data/B_vsx_vsx.parquet")
 # Масштабируем: max, min, Period, RAJ2000, DEJ2000, range
 ```
 
-* Удалены нерелевантные и плохо заполненные признаки.
-* Кодирование меток и бинарных флагов (f\_min, has\_period).
+### Обучение моделей на подмножестве (300 000 объектов)
 
-### Обучение моделей на подмножестве (300 000 объектов)
+1. **LogisticRegression** (`class_weight='balanced'`)
 
-1. **LogisticRegression** (class\_weight='balanced').
+   * ERUPTIVE: precision = 0.05, recall = 0.67, f1 = 0.09
 
-   ```python
-   # Результат:
-   # ERUPTIVE: precision=0.05, recall=0.67, f1=0.09
-   ```
-2. **CatBoostClassifier** (auto\_class\_weights='Balanced', eval\_metric='TotalF1'):
+2. **CatBoostClassifier** (`auto_class_weights='Balanced'`, `eval_metric='TotalF1'`)
 
-   ```python
-   # ERUPTIVE: precision=0.79, recall=0.23, f1=0.36
-   # Общая accuracy=0.91, macro_avg f1≈0.78
-   ```
+   * ERUPTIVE: precision = 0.79, recall = 0.23, f1 = 0.36
+   * Общая accuracy = 0.91, macro\_avg f1 ≈ 0.78
 
 ### Улучшение детекции редкого класса ERUPTIVE
 
-* Обучен отдельный CatBoost детектор (binary) с помощью Optuna (50 испытаний).
-* Подобран threshold на proba\_eruptive (>0.7 - меняем предсказание основной модели на ERUPTIVE, <0.4 - основная модель предсказывает другой класс) для переназначения класса.
-* Комбинирование предсказаний основного CatBoost и детектора.
-
-```python
-# На подмножестве:
-# ERUPTIVE: precision=0.55, recall=0.58, f1=0.57
-# macro_avg f1≈0.84, accuracy≈0.93
-```
+* Обучен отдельный CatBoost-детектор с помощью Optuna (50 испытаний)
+* Подбор порога вероятности `proba_eruptive > 0.95` — присвоение класса ERUPTIVE
+* Комбинирование предсказаний основной модели и детектора
 
 ### Финальная модель на полном наборе
 
-```python
-# CatBoost (Balanced) + детектор eruptive с threshold 0.95 и изменением класса, если модель уверена с вероятностью меньше, чем 0.8
-# Результаты на тесте:
-# ECLIPSING: precision=0.97, recall=0.93, f1=0.95
-# ERUPTIVE: precision=0.65, recall=0.67, f1=0.66
-# PULSATING: precision=0.92, recall=0.94, f1=0.93
-# ROTATING: precision=0.93, recall=0.94, f1=0.94
-# accuracy=0.94, macro_avg f1≈0.87
-```
+**Результаты по классам:**
+
+| Метрика   | ECLIPSING | ERUPTIVE | PULSATING | ROTATING |
+| --------- | --------- | -------- | --------- | -------- |
+| Precision | 0.97      | 0.65     | 0.92      | 0.93     |
+| Recall    | 0.93      | 0.67     | 0.94      | 0.94     |
+| F1-score  | 0.95      | 0.66     | 0.93      | 0.94     |
+
+**Общие метрики:**
+Accuracy = 0.94
+Macro avg F1 = 0.87
+Weighted avg F1 = 0.94
+
+**Матрица ошибок:**
+
+| Actual \ Predicted | 0 (ECLIPSING) | 1 (ERUPTIVE) | 2 (PULSATING) | 3 (ROTATING) |
+| ------------------ | ------------- | ------------ | ------------- | ------------ |
+| 0 (ECLIPSING)      | 494496        | 312          | 21645         | 16430        |
+| 1 (ERUPTIVE)       | 1107          | 12481        | 2369          | 2798         |
+| 2 (PULSATING)      | 8009          | 3357         | 570889        | 23243        |
+| 3 (ROTATING)       | 8705          | 2920         | 22370         | 577544       |
 
 ---
 
@@ -129,16 +135,14 @@ df = pd.read_parquet("./data/B_vsx_vsx.parquet")
    ```bash
    pip install pandas numpy scikit-learn imbalanced-learn catboost xgboost lightgbm optuna
    ```
+
 2. Открыть ноутбук с бинарной классификацией:
 
-   ```bash
-   https://nbviewer.org/github/StalSkyle/stars_classification/blob/main/research.ipynb?flush_cache=true
-   ```
+   [research.ipynb (nbviewer)](https://nbviewer.org/github/StalSkyle/stars_classification/blob/main/research.ipynb?flush_cache=true)
+
 3. Открыть ноутбук с мультиклассовой классификацией:
 
-   ```bash
-   https://nbviewer.org/github/StalSkyle/stars_classification/blob/main/multi_classification.ipynb?flush_cache=true
-   ```
+   [multi\_classification.ipynb (nbviewer)](https://nbviewer.org/github/StalSkyle/stars_classification/blob/main/multi_classification.ipynb?flush_cache=true)
 
 ---
 
@@ -146,4 +150,4 @@ df = pd.read_parquet("./data/B_vsx_vsx.parquet")
 
 Использование методов балансировки классов (SMOTE), подбор гиперпараметров и стэкинг моделей на основе бустинга позволили достичь высокой полноты и хорошего F1. Итоговая модель эффективно справляется с задачей выявления переменных звёзд даже в условиях значительного дисбаланса классов.
 
-Для мультиклассовой классификации применение CatBoost с автоматическим взвешиванием классов, специализированного детектора редкого класса ERUPTIVE и комбинированного порогового подхода позволило достичь macro_avg F1≈0.87 и стабильных метрик по всем классам.
+Для мультиклассовой классификации применение CatBoost с автоматическим взвешиванием классов, специализированного детектора редкого класса ERUPTIVE и комбинированного порогового подхода позволило достичь macro\_avg F1 ≈ 0.87 и стабильных метрик по всем классам.
