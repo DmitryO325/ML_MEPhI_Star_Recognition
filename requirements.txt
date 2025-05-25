@@ -1,0 +1,14 @@
+# Основные библиотеки
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+
+# Для моделей градиентного бустинга
+xgboost
+lightgbm
+catboost
+
+# Jupyter Notebook
+notebook

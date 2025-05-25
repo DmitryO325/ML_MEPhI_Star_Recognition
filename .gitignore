@@ -17,3 +17,7 @@ env/
 # Файлы с секретами и конфигурациями
 .env
 .git
+
+.ipynb_checkpoints/
+catboost_info/
+data/B_vsx_vsx.parquet
