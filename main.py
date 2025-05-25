@@ -10,9 +10,15 @@ from sklearn.metrics import precision_score, recall_score, f1_score, precision_r
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+
 from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+from lightgbm import LGBMClassifier
+
+import optuna
 
 import warnings
+
 warnings.filterwarnings('ignore')
 
 # pd.set_option('display.max_rows', None)
@@ -130,9 +136,9 @@ X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.3, 
 #     model.fit(X_train, y_train)
 #     y_predict = model.predict(X_train)
 
-    # print(f'Precision у модели {model.__class__.__name__}: {precision_score(y_train, y_predict)}')
-    # print(f'Recall у модели {model.__class__.__name__}: {recall_score(y_train, y_predict)}')
-    # print(f'F1-score у модели {model.__class__.__name__}: {f1_score(y_train, y_predict)}\n')
+# print(f'Precision у модели {model.__class__.__name__}: {precision_score(y_train, y_predict)}')
+# print(f'Recall у модели {model.__class__.__name__}: {recall_score(y_train, y_predict)}')
+# print(f'F1-score у модели {model.__class__.__name__}: {f1_score(y_train, y_predict)}\n')
 
 'Проверим precision (точность), recall (полноту) и F1-score на тестовой выборке'
 # print('Тестовая выборка:\n')
@@ -141,12 +147,12 @@ X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.3, 
 #     model.fit(X_train, y_train)
 #     y_predict = model.predict(X_test)
 
-    # print(f'Precision у модели {model.__class__.__name__}: {precision_score(y_test, y_predict)}')
-    # print(f'Recall у модели {model.__class__.__name__}: {recall_score(y_test, y_predict)}')
-    # print(f'F1-score у модели {model.__class__.__name__}: {f1_score(y_test, y_predict)}\n')
+# print(f'Precision у модели {model.__class__.__name__}: {precision_score(y_test, y_predict)}')
+# print(f'Recall у модели {model.__class__.__name__}: {recall_score(y_test, y_predict)}')
+# print(f'F1-score у модели {model.__class__.__name__}: {f1_score(y_test, y_predict)}\n')
 
 'Видим, что у логистической регрессии и метода опорных векторов нет переобучения, но низкий показатель F1-меры'
-'У случайного леса ситуация лучше, но модель переобучается'
+'У случайного леса ситуация лучше, но модель сильно переобучается'
 'Наилучшим образом показывает себя градиентный бустинг, F1-мера равна 0.73'
 'Попробуем улучшить этот показатель'
 
@@ -157,23 +163,26 @@ param_grid = {
     'max_depth': np.arange(5, 8)
 }
 
-# grid = GridSearchCV(XGBClassifier(), param_grid, scoring='f1', cv=3, n_jobs=-1)
-# grid.fit(X_train, y_train)
+gradient_boosting_models = XGBClassifier(), CatBoostClassifier(), LGBMClassifier()
 
-# print('Лучшие параметры:', grid.best_params_)
-'Лучшие гиперпараметры примерно равны: max_depth=5, learning_rate=0.26, n_estimators=550'
+grid = GridSearchCV(XGBClassifier(), param_grid, scoring='f1', cv=3, n_jobs=-1)
+grid.fit(X_train, y_train)
 
-gradient_boosting = XGBClassifier(learning_rate=0.26,
-                                  n_estimators=550,
-                                  max_depth=5)
-gradient_boosting.fit(X_train, y_train)
+# print(f'Лучшие параметры для XGBClassifier согласно GridSearchCV:', grid.best_params_)
+'''Лучшие гиперпараметры ля XGBClassifier согласно GridSearchCV примерно равны:
+   max_depth=5, learning_rate=0.26, n_estimators=550'''
+
+gradient_boosting_xgboost = XGBClassifier(learning_rate=0.26,
+                                          n_estimators=550,
+                                          max_depth=5)
+gradient_boosting_xgboost.fit(X_train, y_train)
 
 'Попробуем найти наилучший порог для F1-меры'
-probs = gradient_boosting.predict_proba(X_test)[:, 1]
+probs = gradient_boosting_xgboost.predict_proba(X_test)[:, 1]
 precision, recall, thresholds = precision_recall_curve(y_test, probs)
 f1_scores = 2 * precision * recall / (precision + recall + 1e-10)
 best_thresh = thresholds[f1_scores.argmax()]
-# print('Лучший порог:', best_thresh)
+print(f'Лучший порог для XGBClassifier:', best_thresh)
 
 'Лучший порог составляет примерно 0.3388796'
 
@@ -183,4 +192,46 @@ print(f'Precision у модели градиентного бустинга: {pr
 print(f'Recall у модели градиентного бустинга: {recall_score(y_test, y_predict)}')
 print(f'F1-score у модели градиентного бустинга: {f1_score(y_test, y_predict)}')
 
+gradient_boosting_catboost = CatBoostClassifier()
+gradient_boosting_catboost.fit(X_train, y_train)
+
+'Попробуем найти наилучший порог для F1-меры'
+probs = gradient_boosting_catboost.predict_proba(X_test)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_test, probs)
+f1_scores = 2 * precision * recall / (precision + recall + 1e-10)
+best_thresh = thresholds[f1_scores.argmax()]
+print(f'Лучший порог для CatBoostClassifier:', best_thresh)
+
+'Лучший порог составляет примерно 0.25729036'
+
+y_predict = (probs > best_thresh).astype(int)
+
+print(f'Precision у модели градиентного бустинга: {precision_score(y_test, y_predict)}')
+print(f'Recall у модели градиентного бустинга: {recall_score(y_test, y_predict)}')
+print(f'F1-score у модели градиентного бустинга: {f1_score(y_test, y_predict)}')
+
+gradient_boosting_lightgbm = LGBMClassifier()
+gradient_boosting_lightgbm.fit(X_train, y_train)
+
+'Попробуем найти наилучший порог для F1-меры'
+probs = gradient_boosting_lightgbm.predict_proba(X_test)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_test, probs)
+f1_scores = 2 * precision * recall / (precision + recall + 1e-10)
+best_thresh = thresholds[f1_scores.argmax()]
+print(f'Лучший порог для LGBMClassifier:', best_thresh)
+
+'Лучший порог составляет примерно 0.25729036'
+
+y_predict = (probs > best_thresh).astype(int)
+
+print(f'Precision у модели градиентного бустинга: {precision_score(y_test, y_predict)}')
+print(f'Recall у модели градиентного бустинга: {recall_score(y_test, y_predict)}')
+print(f'F1-score у модели градиентного бустинга: {f1_score(y_test, y_predict)}')
+
 'Лучший результат F1-меры: 0.7872983870967742'
+#
+# '''Задачи:
+#    1. Проверить CatBoost и LightGBM
+#    2. Создать ipynb-файл
+#    3. Составить матрицу ошибок
+# '''
