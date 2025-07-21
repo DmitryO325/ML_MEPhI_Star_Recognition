@@ -25,7 +25,7 @@
 
 ### Обучение и оптимизация
 
-* Алгоритмы: LogisticRegression, KNN, SVM, DecisionTree, RandomForest, GradientBoosting.
+* Алгоритмы: LogisticRegression, KNN, SVM, DecisionTree, RandomForest, GradientBoosting, StackingBoosting, MLP.
 * Подбор гиперпараметров через GridSearchCV.
 
 **Итоговые метрики финального XGB:**
@@ -39,7 +39,8 @@
 
 ### Стекинг (StackingClassifier)
 
-Использованы базовые модели: CatBoost, XGBoost, LightGBM. Финальный классификатор — LogisticRegression. Порог принятия решения выбран по precision–recall кривой.
+Использованы базовые модели: CatBoost, XGBoost, LightGBM. Финальный классификатор — LogisticRegression. 
+Порог принятия решения выбран по precision–recall кривой.
 
 **Финальные метрики стекинга:**
 
