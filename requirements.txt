@@ -10,5 +10,8 @@ xgboost
 lightgbm
 catboost
 
+# Для нейронных сетей
+torch
+
 # Jupyter Notebook
 notebook
